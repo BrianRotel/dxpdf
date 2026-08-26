@@ -128,6 +128,7 @@ pub(super) fn build_paragraph_block(
             &family,
             size,
             ShapeAutoFit::NONE,
+            None,
         );
         let line_height = ctx
             .measurer

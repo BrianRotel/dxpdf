@@ -514,8 +514,14 @@ pub fn font_props_from_run(
     default_family: &str,
     default_size: Pt,
     auto_fit: crate::render::layout::ShapeAutoFit,
+    text: Option<&str>,
 ) -> FontProps {
-    let family = effective_font(&rp.fonts).unwrap_or(default_family);
+    let family = match text.filter(|t| !t.is_empty()) {
+        Some(t) => crate::render::resolve::fonts::font_family_for_text(&rp.fonts, t, default_family),
+        None => effective_font(&rp.fonts)
+            .unwrap_or(default_family)
+            .to_string(),
+    };
 
     let size = auto_fit.scale_font(rp.font_size.cloned().map(Pt::from).unwrap_or(default_size));
 
@@ -524,7 +530,7 @@ pub fn font_props_from_run(
     let text_scale = rp.text_scale.cloned().map_or(1.0, |s| s.as_factor());
 
     FontProps {
-        family: Rc::from(family),
+        family: Rc::from(family.as_str()),
         size,
         // The model already carries all three §17.7.2 states; this used to be
         // the single line that threw two of them away.
@@ -702,6 +708,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert_eq!(&*fp.family, "Helvetica");
         assert_eq!(fp.size.raw(), 12.0);
@@ -729,6 +736,7 @@ mod tests {
                 "Helvetica",
                 Pt::new(12.0),
                 crate::render::layout::ShapeAutoFit::NONE,
+                None,
             )
         };
 
@@ -775,6 +783,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!(!fp.underline, "no <w:u> element → no underline");
     }
@@ -786,6 +795,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!(
             !fp.underline,
@@ -801,6 +811,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!(fp.underline, "<w:u w:val=\"single\"/> → underline drawn");
     }
@@ -813,6 +824,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert_eq!(fp.text_scale, 1.0);
     }
@@ -829,6 +841,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!((fp.text_scale - 0.8).abs() < f32::EPSILON);
     }
@@ -845,6 +858,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!((fp.text_scale - 1.5).abs() < f32::EPSILON);
     }
@@ -859,6 +873,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            None,
         );
         assert!(fp.underline);
     }

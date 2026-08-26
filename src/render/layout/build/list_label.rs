@@ -160,6 +160,7 @@ pub(super) fn inject_list_label(
                 &fam,
                 size,
                 state.shape_auto_fit,
+                None,
             );
             if alignment_suppresses_tab(merged_props) {
                 // An image's advance is its drawn size, so the gap cannot be
@@ -515,6 +516,7 @@ pub(super) fn build_label_font_props(
         default_family,
         default_size,
         auto_fit,
+        None,
     )
 }
 

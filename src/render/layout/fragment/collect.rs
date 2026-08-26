@@ -130,6 +130,7 @@ fn resolve_run_styling<F>(
     theme: Option<&crate::model::Theme>,
     auto_fit: crate::render::layout::ShapeAutoFit,
     measure_text: &F,
+    text: Option<&str>,
 ) -> (FontProps, TextRunStyle)
 where
     F: Fn(&str, &FontProps) -> (Pt, TextMetrics),
@@ -151,7 +152,13 @@ where
         crate::render::resolve::properties::merge_run_properties(&mut effective_props, para_run);
     }
 
-    let mut font = font_props_from_run(&effective_props, default_family, default_size, auto_fit);
+    let mut font = font_props_from_run(
+        &effective_props,
+        default_family,
+        default_size,
+        auto_fit,
+        text,
+    );
     let color = effective_props
         .color
         .map(|c| {
@@ -400,6 +407,7 @@ fn emit_field_substitution<F>(
             theme,
             auto_fit,
             measure_text,
+            Some(text),
         ),
         _ => (
             FontProps {
@@ -594,6 +602,7 @@ where
                         theme,
                         auto_fit,
                         measure_text,
+                        Some(&sub),
                     );
                     field_sub_emitted = true;
                     emit_text_fragments(
@@ -619,7 +628,7 @@ where
                 // resolved styling is memoized against the run's identity —
                 // `classify` never interleaves runs, so a one-entry memo
                 // catches every repeat.
-                let mut run_styling: Option<(&TextRun, Rc<FontProps>, TextRunStyle)> = None;
+                let mut run_styling: Option<(&TextRun, Rc<str>, Rc<FontProps>, TextRunStyle)> = None;
                 for piece in seg.classify() {
                     match piece {
                         SegmentPiece::Text {
@@ -628,7 +637,10 @@ where
                             break_after,
                         } => {
                             let (font, text_style) = match &run_styling {
-                                Some((cached, font, style)) if std::ptr::eq(*cached, run) => {
+                                Some((cached, cached_text, font, style))
+                                    if std::ptr::eq(*cached, run)
+                                        && cached_text.as_ref() == text.as_str() =>
+                                {
                                     (font, style)
                                 }
                                 _ => {
@@ -642,9 +654,14 @@ where
                                         theme,
                                         auto_fit,
                                         measure_text,
+                                        Some(&text),
                                     );
-                                    let (_, font, style) =
-                                        run_styling.insert((run, Rc::new(font), style));
+                                    let (_, _, font, style) = run_styling.insert((
+                                        run,
+                                        Rc::from(text.as_str()),
+                                        Rc::new(font),
+                                        style,
+                                    ));
                                     (&*font, &*style)
                                 }
                             };
@@ -679,6 +696,7 @@ where
                                 theme,
                                 auto_fit,
                                 measure_text,
+                                Some(&text),
                             );
                             if let Some(measurer) = ctx.measurer {
                                 let cluster = EmojiCluster {
@@ -722,21 +740,21 @@ where
                         continue;
                     }
 
-                    let (font, text_style) = resolve_run_styling(
-                        tr,
-                        default_family,
-                        default_size,
-                        default_color,
-                        resolved_styles,
-                        paragraph_run_defaults,
-                        theme,
-                        auto_fit,
-                        measure_text,
-                    );
-
                     if field_sub_pending.is_some() {
                         let sub = field_sub_pending.take().unwrap();
                         field_sub_emitted = true;
+                        let (font, text_style) = resolve_run_styling(
+                            tr,
+                            default_family,
+                            default_size,
+                            default_color,
+                            resolved_styles,
+                            paragraph_run_defaults,
+                            theme,
+                            auto_fit,
+                            measure_text,
+                            Some(&sub),
+                        );
                         emit_text_fragments(
                             &sub,
                             &font,
@@ -747,9 +765,33 @@ where
                             &mut fragments,
                         );
                     } else {
+                        let (default_font, default_text_style) = resolve_run_styling(
+                            tr,
+                            default_family,
+                            default_size,
+                            default_color,
+                            resolved_styles,
+                            paragraph_run_defaults,
+                            theme,
+                            auto_fit,
+                            measure_text,
+                            None,
+                        );
                         for element in &tr.content {
                             match element {
                                 RunElement::Text(text) => {
+                                    let (font, text_style) = resolve_run_styling(
+                                        tr,
+                                        default_family,
+                                        default_size,
+                                        default_color,
+                                        resolved_styles,
+                                        paragraph_run_defaults,
+                                        theme,
+                                        auto_fit,
+                                        measure_text,
+                                        Some(text),
+                                    );
                                     emit_text_fragments(
                                         text,
                                         &font,
@@ -762,11 +804,11 @@ where
                                 }
                                 RunElement::Tab => {
                                     fragments.push(Fragment::Tab {
-                                        line_height: font.size,
+                                        line_height: default_font.size,
                                         // §17.3.1.38: a leader on this tab is
                                         // drawn in the tab run's own formatting.
-                                        font: Rc::new(font.clone()),
-                                        color: text_style.color,
+                                        font: Rc::new(default_font.clone()),
+                                        color: default_text_style.color,
                                         fitting_width: None,
                                     });
                                 }
@@ -775,19 +817,19 @@ where
                                         align: ptab.alignment,
                                         relative_to: ptab.relative_to,
                                         leader: ptab.leader.into(),
-                                        line_height: font.size,
-                                        font: Rc::new(font.clone()),
-                                        color: text_style.color,
+                                        line_height: default_font.size,
+                                        font: Rc::new(default_font.clone()),
+                                        color: default_text_style.color,
                                     });
                                 }
                                 RunElement::LineBreak(_) => {
                                     fragments.push(Fragment::LineBreak {
-                                        line_height: font.size,
+                                        line_height: default_font.size,
                                     });
                                 }
                                 RunElement::PageBreak => {
                                     fragments.push(Fragment::PageBreak {
-                                        line_height: font.size,
+                                        line_height: default_font.size,
                                     });
                                 }
                                 RunElement::ColumnBreak => {

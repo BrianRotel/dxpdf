@@ -72,6 +72,11 @@ pub fn collect_font_families(doc: &Document) -> Vec<String> {
 /// ascii > high_ansi > east_asian > complex_script (§17.3.2.26).
 /// By the time this is called, theme references will have been resolved
 /// into the `explicit` field by [`resolve_font_set_themes`].
+///
+/// Prefer [`font_family_for_text`] when the string being shaped is known:
+/// using this alone for a CJK header/footer run picks `ascii` (e.g. Calibri)
+/// even when `east_asian` (e.g. 宋体) is set — the usual Word failure mode on
+/// OHOS where Latin has no Han glyphs.
 pub fn effective_font(fonts: &FontSet) -> Option<&str> {
     fonts
         .ascii
@@ -80,6 +85,41 @@ pub fn effective_font(fonts: &FontSet) -> Option<&str> {
         .or(fonts.high_ansi.explicit.as_deref())
         .or(fonts.east_asian.explicit.as_deref())
         .or(fonts.complex_script.explicit.as_deref())
+}
+
+/// True when `c` should be rendered from the `w:rFonts/@w:eastAsia` slot.
+fn char_needs_east_asian_font(c: char) -> bool {
+    let u = c as u32;
+    (0x1100..=0x11FF).contains(&u) // Hangul Jamo
+        || (0x2E80..=0x9FFF).contains(&u) // CJK radicals … Unified
+        || (0xAC00..=0xD7AF).contains(&u) // Hangul syllables
+        || (0xF900..=0xFAFF).contains(&u) // CJK Compatibility Ideographs
+        || (0xFE30..=0xFE4F).contains(&u) // CJK Compatibility Forms
+        || (0xFF00..=0xFFEF).contains(&u) // Halfwidth and Fullwidth Forms
+        || (0x3000..=0x303F).contains(&u) // CJK Symbols and Punctuation
+        || (0x20000..=0x2FFFF).contains(&u) // CJK Unified Extension B–F
+        || (0x3040..=0x30FF).contains(&u) // Hiragana / Katakana
+}
+
+/// Whether any character in `text` belongs in the eastAsian font slot.
+pub fn text_uses_east_asian_font(text: &str) -> bool {
+    text.chars().any(char_needs_east_asian_font)
+}
+
+/// Pick the font family for a concrete string, honouring §17.3.2.26 script slots.
+///
+/// When the text contains East Asian characters and `east_asian` is set in the
+/// cascade, that face wins over `ascii`/`high_ansi`. Falls back to
+/// [`effective_font`] then `default`.
+pub fn font_family_for_text(fonts: &FontSet, text: &str, default: &str) -> String {
+    if text_uses_east_asian_font(text) {
+        if let Some(f) = fonts.east_asian.explicit.as_deref().filter(|s| !s.is_empty()) {
+            return f.to_string();
+        }
+    }
+    effective_font(fonts)
+        .unwrap_or(default)
+        .to_string()
 }
 
 /// §17.3.2.26: resolve theme font references in a FontSet.
@@ -269,6 +309,31 @@ mod tests {
     fn effective_font_empty_returns_none() {
         let fs = FontSet::default();
         assert_eq!(effective_font(&fs), None);
+    }
+
+    #[test]
+    fn font_family_for_text_prefers_east_asian_for_cjk() {
+        let fs = FontSet {
+            ascii: FontSlot::from_name("Calibri"),
+            east_asian: FontSlot::from_name("SimSun"),
+            ..Default::default()
+        };
+        assert_eq!(
+            font_family_for_text(&fs, "中国移动", "Helvetica"),
+            "SimSun"
+        );
+        assert_eq!(font_family_for_text(&fs, "第 1 页", "Helvetica"), "SimSun");
+    }
+
+    #[test]
+    fn font_family_for_text_keeps_ascii_for_latin_only() {
+        let fs = FontSet {
+            ascii: FontSlot::from_name("Calibri"),
+            east_asian: FontSlot::from_name("SimSun"),
+            ..Default::default()
+        };
+        assert_eq!(font_family_for_text(&fs, "PAGE", "Helvetica"), "Calibri");
+        assert_eq!(font_family_for_text(&fs, "12", "Helvetica"), "Calibri");
     }
 
     // ── collect_font_families ────────────────────────────────────────────
