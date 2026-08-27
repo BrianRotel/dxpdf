@@ -80,6 +80,10 @@ pub enum NumberFormat {
     // Additive numerals over a fixed value table.
     Hebrew1,
     ArabicAbjad,
+
+    /// §17.18.59 CJK counting — 一, 二, 十二 (not positional 一二).
+    ChineseCounting,
+    ChineseCountingThousand,
 }
 
 // ── Height Rule ──────────────────────────────────────────────────────────────

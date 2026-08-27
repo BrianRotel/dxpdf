@@ -202,6 +202,10 @@ fn format_number(n: u32, fmt: NumberFormat, locale: Locale) -> String {
         NumberFormat::Hebrew1 => to_hebrew_numeral(n),
         NumberFormat::ArabicAbjad => to_additive(n, &ABJAD_NUMERALS),
 
+        NumberFormat::ChineseCounting | NumberFormat::ChineseCountingThousand => {
+            to_chinese_counting(n)
+        }
+
         // §17.9.27: the three formats that are written differently in every
         // language, delegated whole to `spellout`. A language it cannot spell
         // answers `None` and gets the digits — not a degrade for its own sake:
@@ -292,6 +296,45 @@ fn to_roman_lower(mut n: u32) -> String {
 
 fn to_roman_upper(n: u32) -> String {
     to_roman_lower(n).to_uppercase()
+}
+
+/// §17.18.59 `chineseCounting` / `chineseCountingThousand` for list labels.
+/// Covers 0…9999 (Word list counters); larger values fall back to decimal.
+fn to_chinese_counting(n: u32) -> String {
+    const D: [&str; 10] = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+    if n == 0 {
+        return D[0].to_string();
+    }
+    if n >= 10_000 {
+        return n.to_string();
+    }
+    let mut out = String::new();
+    let n = n;
+    let units = ["", "十", "百", "千"];
+    let mut need_zero = false;
+    for (i, unit) in units.iter().enumerate().rev() {
+        let place = 10u32.pow(i as u32);
+        let digit = (n / place) % 10;
+        if digit == 0 {
+            if !out.is_empty() {
+                need_zero = true;
+            }
+            continue;
+        }
+        if need_zero {
+            out.push_str(D[0]);
+            need_zero = false;
+        }
+        if place == 10 && digit == 1 && out.is_empty() {
+            out.push_str("十");
+        } else {
+            out.push_str(D[digit as usize]);
+            if !unit.is_empty() {
+                out.push_str(unit);
+            }
+        }
+    }
+    out
 }
 
 // ── §17.18.59 sequences that need no language data (issue #132) ─────────────
@@ -969,6 +1012,8 @@ mod tests {
         NumberFormat::IdeographZodiacTraditional,
         NumberFormat::Hebrew1,
         NumberFormat::ArabicAbjad,
+        NumberFormat::ChineseCounting,
+        NumberFormat::ChineseCountingThousand,
     ];
 
     /// The claim issue #132's classification rests on, as a test: not one of
@@ -990,8 +1035,7 @@ mod tests {
 
     /// Digit substitution is positional — each decimal place is replaced on
     /// its own, so 12 is two characters and not the word for twelve. That is
-    /// what separates `ideographDigital` (一二) from `chineseCounting` (十二),
-    /// which is still unsupported.
+    /// what separates `ideographDigital` (一二) from `chineseCounting` (十二).
     #[test]
     fn digit_substitution_replaces_each_place_independently() {
         assert_eq!(fmt(12, NumberFormat::DecimalFullWidth), "１２");
@@ -1001,6 +1045,17 @@ mod tests {
         assert_eq!(fmt(45, NumberFormat::ThaiNumbers), "๔๕");
         assert_eq!(fmt(12, NumberFormat::IdeographDigital), "一二");
         assert_eq!(fmt(10, NumberFormat::IdeographDigital), "一〇");
+    }
+
+    #[test]
+    fn chinese_counting_formats() {
+        assert_eq!(fmt(1, NumberFormat::ChineseCountingThousand), "一");
+        assert_eq!(fmt(2, NumberFormat::ChineseCountingThousand), "二");
+        assert_eq!(fmt(10, NumberFormat::ChineseCountingThousand), "十");
+        assert_eq!(fmt(11, NumberFormat::ChineseCountingThousand), "十一");
+        assert_eq!(fmt(12, NumberFormat::ChineseCounting), "十二");
+        assert_eq!(fmt(20, NumberFormat::ChineseCounting), "二十");
+        assert_eq!(fmt(21, NumberFormat::ChineseCounting), "二十一");
     }
 
     #[test]

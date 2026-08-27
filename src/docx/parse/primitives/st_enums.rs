@@ -408,6 +408,13 @@ pub enum StNumberFormat {
     /// Arabic abjad numerals — `ا`=1, `ي`=10, `ق`=100.
     ArabicAbjad,
 
+    // ── CJK counting (list labels) ────────────────────────────────────────
+    /// §17.18.59 `chineseCounting` — 一, 二, … 十二 for 12.
+    ChineseCounting,
+    /// §17.18.59 `chineseCountingThousand` — same rules for list counters
+    /// under 10 000; grouping differs only at larger magnitudes.
+    ChineseCountingThousand,
+
     /// §17.18.59's remaining values, which this engine renders as decimal.
     ///
     /// This is the **exception to the strict-enum rule**: a large, extensible
@@ -492,6 +499,9 @@ impl From<StNumberFormat> for NumberFormat {
 
             StNumberFormat::Hebrew1 => Self::Hebrew1,
             StNumberFormat::ArabicAbjad => Self::ArabicAbjad,
+
+            StNumberFormat::ChineseCounting => Self::ChineseCounting,
+            StNumberFormat::ChineseCountingThousand => Self::ChineseCountingThousand,
 
             StNumberFormat::Other => Self::Decimal,
         }
@@ -1285,13 +1295,9 @@ mod tests {
     #[test]
     fn number_format_unsupported_legal_values_degrade_not_fail() {
         // §17.18.59's remaining values must parse (→ Other) and convert to
-        // Decimal rather than failing the whole document parse. All of these
-        // are spellout — a counting system, a currency, or §17.9.30's picture
-        // string — which is what keeps them on this side of the boundary; see
-        // `StNumberFormat::Other`.
+        // Decimal rather than failing the whole document parse.
         for v in [
             "japaneseCounting",
-            "chineseCountingThousand",
             "koreanDigital2",
             "vietnameseCounting",
             "bahtText",
@@ -1304,6 +1310,14 @@ mod tests {
                 "{v:?} is spec-legal and must degrade to Other, not error"
             );
         }
+        assert_eq!(
+            de::<StNumberFormat>("chineseCountingThousand").unwrap(),
+            StNumberFormat::ChineseCountingThousand
+        );
+        assert_eq!(
+            de::<StNumberFormat>("chineseCounting").unwrap(),
+            StNumberFormat::ChineseCounting
+        );
         assert_eq!(
             NumberFormat::from(StNumberFormat::Other),
             NumberFormat::Decimal
