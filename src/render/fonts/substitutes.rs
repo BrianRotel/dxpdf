@@ -41,6 +41,156 @@ pub(crate) const FONT_SUBSTITUTIONS: &[(&str, &[&str])] = &[
         &["Inconsolata", "Liberation Mono", "Noto Sans Mono"],
     ),
     ("Segoe UI", &["Noto Sans", "Liberation Sans"]),
+    // CJK (macOS / HarmonyOS common installs). Without these, missing
+    // 微软雅黑/宋体 falls through to Helvetica and Chinese glyphs disappear.
+    (
+        "微软雅黑",
+        &[
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "Songti SC",
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            "Source Han Sans SC",
+            "HarmonyOS Sans SC",
+        ],
+    ),
+    (
+        "Microsoft YaHei",
+        &[
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "Songti SC",
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            "HarmonyOS Sans SC",
+        ],
+    ),
+    (
+        "Microsoft YaHei UI",
+        &[
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "Songti SC",
+            "Noto Sans CJK SC",
+        ],
+    ),
+    (
+        "宋体",
+        &[
+            "Songti SC",
+            "STSong",
+            "Hiragino Mincho ProN",
+            "Noto Serif CJK SC",
+            "SimSun",
+            // HarmonyOS device fonts (cover/body often mix 宋体 + 黑体)
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        "SimSun",
+        &[
+            "Songti SC",
+            "STSong",
+            "Noto Serif CJK SC",
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        // Handbook cover titles use 黑体; OHOS has no Heiti/PingFang — must
+        // reach HarmonyOS Sans or Chinese glyphs vanish while 微软雅黑 body OK.
+        "黑体",
+        &[
+            "Heiti SC",
+            "STHeiti",
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Noto Sans CJK SC",
+            "Noto Sans SC",
+            // Device TTF nameID=1 en / zh (HarmonyOS_Sans_SC.ttf)
+            "HarmonyOS Sans SC",
+            "鸿蒙黑体",
+            "HarmonyOS_Sans_SC",
+            "HarmonyOS Sans",
+        ],
+    ),
+    (
+        "SimHei",
+        &[
+            "Heiti SC",
+            "STHeiti",
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Noto Sans CJK SC",
+            "HarmonyOS Sans SC",
+            "鸿蒙黑体",
+            "HarmonyOS_Sans_SC",
+            "HarmonyOS Sans",
+        ],
+    ),
+    (
+        "等线",
+        &[
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "Songti SC",
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        "DengXian",
+        &[
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "Songti SC",
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        "楷体",
+        &[
+            "Kaiti SC",
+            "STKaiti",
+            "KaiTi",
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        "仿宋",
+        &[
+            "STFangsong",
+            "FangSong",
+            "Songti SC",
+            "HarmonyOS Sans SC",
+            "HarmonyOS_Sans_SC",
+        ],
+    ),
+    (
+        "新細明體",
+        &["Songti TC", "PingFang TC", "Heiti TC", "Noto Sans CJK TC"],
+    ),
+    (
+        "游ゴシック",
+        &["Hiragino Sans", "YuGothic", "Noto Sans CJK JP"],
+    ),
+    (
+        "游明朝",
+        &["Hiragino Mincho ProN", "YuMincho", "Noto Serif CJK JP"],
+    ),
+    (
+        "맑은 고딕",
+        &["Apple SD Gothic Neo", "Noto Sans CJK KR", "Malgun Gothic"],
+    ),
 ];
 
 /// Strip a trailing weight word from a face-qualified family name, yielding the
