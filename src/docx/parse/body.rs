@@ -77,7 +77,15 @@ pub(crate) fn convert_container(
         match child {
             BlockChildXml::Paragraph(p) => {
                 let (para, sect_after) = convert_paragraph(*p, ctx);
-                blocks.push(Block::Paragraph(Box::new(para)));
+                // A paragraph that exists only to carry `<w:sectPr>` (no runs) is
+                // a section marker, not a story paragraph. Emitting it would
+                // paint a lone list label (e.g. 「一、」) and advance the heading
+                // counter so the next visible heading becomes 「二、」. Word/WPS
+                // omit that marker from the story — keep only the SectionBreak.
+                let section_marker_only = sect_after.is_some() && para.content.is_empty();
+                if !section_marker_only {
+                    blocks.push(Block::Paragraph(Box::new(para)));
+                }
                 if let Some(sp) = sect_after {
                     blocks.push(Block::SectionBreak(Box::new(sp)));
                 }
