@@ -594,6 +594,17 @@ pub(super) fn remap_legacy_font_chars(
     let is_wingdings = font_family.eq_ignore_ascii_case("Wingdings");
 
     if !is_symbol && !is_wingdings {
+        // §17.9.11 bullet `lvlText` is often a lone Wingdings PUA (e.g. U+F0D8)
+        // even when the level's `w:rFonts` did not survive the label cascade.
+        // Handing that scalar to 宋体/HarmonyOS Sans yields `.notdef` / on-screen
+        // "乱码" — try Wingdings remapping before giving up.
+        if !text.is_empty()
+            && text
+                .chars()
+                .all(|c| LEGACY_PUA_RANGE.contains(&(c as u32)))
+        {
+            return remap_legacy_font_chars(text, "Wingdings", fallback_family);
+        }
         let family = if font_family.is_empty() {
             fallback_family
         } else {
@@ -829,7 +840,10 @@ fn wingdings_pua_to_unicode(code: u32) -> Option<char> {
         0xF0A7 => '\u{25AA}',  // BLACK SMALL SQUARE
         0xF0A8 => '\u{25FB}',  // WHITE MEDIUM SQUARE
         0xF0D5 => '\u{232B}',  // ERASE TO THE LEFT
-        0xF0D8 => '\u{27A2}',  // THREE-D TOP-LIGHTED RIGHTWARDS ARROWHEAD
+        // Wingdings  — map to U+2022 so CJK fallbacks (HarmonyOS Sans SC,
+        // Songti) always cover it. U+27A2/U+25BA dingbats are often missing
+        // on OHOS PDF viewers and still extract as `/g0` or blank squares.
+        0xF0D8 => '\u{2022}',  // BULLET
         0xF0E8 => '\u{2B22}',  // BLACK HEXAGON (approximate)
         0xF0F0 => '\u{2B1A}',  // DOTTED SQUARE (approximate)
         0xF0FB => '\u{2718}',  // HEAVY BALLOT X
@@ -1139,6 +1153,15 @@ mod tests {
             family, "Symbol",
             "keep the legacy face — it is the only one that can render this"
         );
+    }
+
+    /// Handbook bullet: Wingdings U+F0D8 in `lvlText` when the label cascade
+    /// lost `w:rFonts` must still remap — otherwise the PUA lands in Calibri.
+    #[test]
+    fn wingdings_bullet_remaps_even_without_cascade_font() {
+        let (text, family) = remap_legacy_font_chars("\u{F0D8}", "", "Calibri");
+        assert_eq!(text, "\u{2022}");
+        assert_eq!(family, "Calibri");
     }
 
     /// Mixed input: one unmapped character is enough to keep the legacy font,

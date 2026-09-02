@@ -368,22 +368,33 @@ fn inject_text_label(
 
     // Legacy Symbol/Wingdings remapping needs the cascade-resolved
     // family before deciding whether to remap PUA codepoints back to
-    // their bullet glyphs.
+    // their bullet glyphs. Bullet levels always carry Wingdings PUA in
+    // `lvlText`; force that table when the cascade lost `w:rFonts`.
     let cascade_family = cascade
         .iter()
         .find_map(|rp| crate::render::resolve::fonts::effective_font(&rp.fonts))
         .unwrap_or("");
+    let remap_font = if level_def.is_some_and(|l| l.format == model::NumberFormat::Bullet) {
+        "Wingdings"
+    } else {
+        cascade_family
+    };
     let (label_text, label_family) =
-        remap_legacy_font_chars(&label_text, cascade_family, &default_family);
+        remap_legacy_font_chars(&label_text, remap_font, &default_family);
 
     // Build the label font through the canonical path so every
     // label-relevant field (underline, char_spacing, text_scale, etc.)
     // flows from cascade.resolve() into `font_props_from_run`. After
-    // remapping, override the family if it changed.
-    let mut label_font = build_label_font_props(&cascade, &default_family, default_size, auto_fit);
-    if label_family != *label_font.family {
-        label_font.family = Rc::from(label_family.as_str());
-    }
+    // remapping to Unicode, always paint with the text font — never the
+    // legacy face the cascade may still name for a lone PUA bullet.
+    let mut label_font = build_label_font_props(
+        &cascade,
+        &label_family,
+        default_size,
+        auto_fit,
+        &label_text,
+    );
+    label_font.family = Rc::from(label_family.as_str());
     // §17.3.2.40: populate underline metrics from font metrics now that
     // the bool is settled — `populate_underline_metrics` (used by
     // `build_fragments`) ran before label injection, so this fragment
@@ -509,6 +520,7 @@ pub(super) fn build_label_font_props(
     default_family: &str,
     default_size: Pt,
     auto_fit: crate::render::layout::ShapeAutoFit,
+    label_text: &str,
 ) -> crate::render::layout::fragment::FontProps {
     let effective = cascade.resolve();
     crate::render::layout::fragment::font_props_from_run(
@@ -516,7 +528,7 @@ pub(super) fn build_label_font_props(
         default_family,
         default_size,
         auto_fit,
-        None,
+        Some(label_text),
     )
 }
 
@@ -1534,6 +1546,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert!(
             font.underline,
@@ -1558,6 +1571,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert!(font.underline);
     }
@@ -1581,6 +1595,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert!(
             !font.underline,
@@ -1607,6 +1622,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         // 40 twips = 2 pt.
         assert!((font.char_spacing.raw() - 2.0).abs() < 1e-4);
@@ -1630,6 +1646,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert!((font.text_scale - 1.5).abs() < 1e-4);
     }
@@ -1658,6 +1675,7 @@ mod tests {
             "Helvetica",
             Pt::new(10.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert_eq!(font.bold, Toggle::On);
         assert_eq!(font.italic, Toggle::On);
@@ -1678,6 +1696,7 @@ mod tests {
             "Helvetica",
             Pt::new(12.0),
             crate::render::layout::ShapeAutoFit::NONE,
+            "1.",
         );
         assert_eq!(&*font.family, "Helvetica");
     }
