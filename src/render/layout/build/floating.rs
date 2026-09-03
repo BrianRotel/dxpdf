@@ -268,7 +268,7 @@ pub(super) fn extract_floating_shapes(
         // benefit from the typed sub-layout — the consumer shifts the
         // commands by the shape's resolved origin (whether `RelativeToParagraph`
         // or `Absolute`), so text always lands on the shape's fill.
-        let text_commands = build_shape_text_commands(wsp, extent, ctx, state);
+        let text_commands = build_shape_text_commands(wsp, extent, ctx, state, Some(anchor));
 
         shapes.push(FloatingShape {
             x,
@@ -715,19 +715,24 @@ impl FrameGeometry {
     fn new(pc: &crate::render::layout::page::PageConfig, frame: AnchorFrame) -> Self {
         let (margin_left, margin_right) = (pc.margins.left, pc.margins.right);
         let page_width = pc.page_size.width;
+        let content_width = (page_width - margin_left - margin_right).max(Pt::ZERO);
         let (page_left, container) = match frame {
             AnchorFrame::Page => (
                 Pt::ZERO,
                 AnchorSpan {
                     start: margin_left,
-                    extent: (page_width - margin_left - margin_right).max(Pt::ZERO),
+                    extent: content_width,
                 },
             ),
+            // Stack origin is the left margin. `margin`/`column` are still the
+            // text column — a zero extent made `wp:align=center` collapse to
+            // `-width/2`, so a footer text box declared as centred on the
+            // margin sat on the content's left edge (handbook page numbers).
             AnchorFrame::Stack => (
                 -margin_left,
                 AnchorSpan {
                     start: Pt::ZERO,
-                    extent: Pt::ZERO,
+                    extent: content_width,
                 },
             ),
         };
@@ -1211,11 +1216,17 @@ impl BodyAnchor {
 /// shape's interior doesn't pollute the outer document; `field_ctx` is copied
 /// so PAGE/NUMPAGES inside a shape's text body still resolve against the host
 /// page.
+///
+/// When `anchor` has horizontal `Center` alignment, paragraphs that inherit a
+/// left/start footer style are laid out centred inside the box — otherwise a
+/// centred floating page-number box still left-aligns its text and looks off
+/// the page midline (WPS visually centres those footers).
 pub(super) fn build_shape_text_commands(
     wsp: &crate::model::WordProcessingShape,
     extent: PtSize,
     ctx: &BuildContext,
     state: &BuildState,
+    anchor: Option<&crate::model::AnchorProperties>,
 ) -> Vec<crate::render::layout::draw_command::DrawCommand> {
     if wsp.txbx_content.is_empty() {
         return Vec::new();
@@ -1298,7 +1309,10 @@ pub(super) fn build_shape_text_commands(
         warned_row_cell_spacing: false,
     };
 
-    let hf = super::build_header_footer_content(&wsp.txbx_content, ctx, &mut sub_state);
+    let mut hf = super::build_header_footer_content(&wsp.txbx_content, ctx, &mut sub_state);
+    if shape_h_is_center(anchor) {
+        center_shape_paragraphs(&mut hf.blocks);
+    }
     // §20.1.2.1.18: the body's own shrink also applies to the fallback line
     // height, which is what an empty paragraph and an image-only line fall back
     // to — otherwise a shrunk body would keep full-size blank lines.
@@ -1342,6 +1356,30 @@ pub(super) fn build_shape_text_commands(
         commands.push(cmd);
     }
     commands
+}
+
+fn shape_h_is_center(anchor: Option<&crate::model::AnchorProperties>) -> bool {
+    matches!(
+        anchor.map(|a| &a.horizontal_position),
+        Some(crate::model::AnchorPosition::Align {
+            alignment: crate::model::AnchorAlignment::Center,
+            ..
+        })
+    )
+}
+
+fn center_shape_paragraphs(blocks: &mut [crate::render::layout::section::LayoutBlock]) {
+    use crate::model::Alignment;
+    use crate::render::layout::section::LayoutBlock;
+    for block in blocks {
+        if let LayoutBlock::Paragraph { style, .. } = block {
+            // Only lift inherited left/start — an explicit right/end in the
+            // text box stays put.
+            if matches!(style.alignment, Alignment::Start | Alignment::Both) {
+                style.alignment = Alignment::Center;
+            }
+        }
+    }
 }
 
 /// Whether `@vertOverflow` keeps `cmd`, given the bottom of the body's box.
@@ -1807,7 +1845,7 @@ mod tests {
             resolved: &resolved,
         };
         let state = BuildState::default();
-        let commands = build_shape_text_commands(wsp, extent, &ctx, &state);
+        let commands = build_shape_text_commands(wsp, extent, &ctx, &state, None);
         commands
             .iter()
             .find_map(|c| match c {
@@ -2199,17 +2237,16 @@ mod tests {
         }
     }
 
-    /// `Stack` has no container extent at extraction time, so a margin-relative
-    /// alignment has nothing to align *within* and collapses onto the frame
-    /// origin. `Right`/`Center` therefore run negative by the object's own
-    /// width. Pinned because every new region has to keep respecting it —
-    /// giving one of them a real extent here would shift header floats.
+    /// Stack coordinates start at the left margin, so a margin-relative
+    /// alignment is inside the 0..468 text column — the same numbers as the
+    /// page-frame text area, without the 72pt offset (that offset is applied
+    /// when the stack is painted).
     #[test]
-    fn stack_frame_align_collapses_to_the_frame_origin() {
+    fn stack_frame_margin_align_uses_the_text_column() {
         for (alignment, expected) in [
             (AnchorAlignment::Left, 0.0),
-            (AnchorAlignment::Center, -50.0),
-            (AnchorAlignment::Right, -100.0),
+            (AnchorAlignment::Center, (468.0 - 100.0) * 0.5),
+            (AnchorAlignment::Right, 468.0 - 100.0),
         ] {
             let got = x_of(
                 &h_align(AnchorRelativeFrom::Margin, alignment),
