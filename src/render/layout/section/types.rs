@@ -243,6 +243,11 @@ pub struct FloatingShape {
     /// text-box content or whose anchor model isn't supported by the
     /// sub-layout code yet (page-anchored vertical positions).
     pub text_commands: Vec<crate::render::layout::draw_command::DrawCommand>,
+    /// §20.4.3.1: the anchor's horizontal alignment was `center`. Footers
+    /// often put the page number both in such a float *and* in sibling
+    /// left-aligned paragraphs (handbook); the renderer uses this to
+    /// centre those host paragraphs so the left copy does not dominate.
+    pub h_align_center: bool,
 }
 
 impl FloatingShape {

@@ -286,6 +286,7 @@ pub(super) fn extract_floating_shapes(
             stroke: visuals.stroke,
             effects: visuals.effects,
             text_commands,
+            h_align_center: shape_h_is_center(Some(anchor)),
         });
     }
 
@@ -619,6 +620,9 @@ fn build_vml_rect_shape(
         // y by the inline-fragment collector. Sub-layout into shape-local
         // commands isn't wired for VML primitives yet.
         text_commands: Vec::new(),
+        // `mso-position-horizontal:center` is not yet read off VML style;
+        // the live DrawingML Choice branch carries `h_align_center`.
+        h_align_center: false,
     })
 }
 

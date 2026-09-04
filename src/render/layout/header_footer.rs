@@ -15,7 +15,7 @@ use crate::render::resolve::header_footer::{HeaderFooterKind, HeaderFooterSet};
 use super::build::{build_header_footer_content, BuildContext, BuildState, HeaderFooterContent};
 use super::draw_command::{DrawCommand, LayoutedPage};
 use super::page::PageConfig;
-use super::section::{stack_blocks, PageParity};
+use super::section::{stack_blocks, LayoutBlock, PageParity};
 
 /// Decide which slot of a `HeaderFooterSet` applies to a given page,
 /// per ECMA-376 §17.10.6 (`titlePg`) and §17.10.1
@@ -313,7 +313,16 @@ pub fn render_headers_footers(
                 ..state.field_ctx
             };
 
-            let hf = build_header_footer_content(blocks, ctx, state);
+            let mut hf = build_header_footer_content(blocks, ctx, state);
+            // Handbook-style footers: a `wp:align=center` text box holds the
+            // page number, but sibling paragraphs still inherit footer
+            // `jc=left` and paint a second copy at the content's left edge.
+            // Lifting those host paragraphs to center matches WPS/Word's
+            // visual (the float is the authored centre; the left copy is
+            // editing residue that Word's text box covers).
+            if footer_has_center_aligned_float(&hf) {
+                center_start_paragraphs(&mut hf.blocks);
+            }
             render_footer(
                 page,
                 config,
@@ -335,6 +344,34 @@ pub fn render_headers_footers(
         num_pages: None,
         ..state.field_ctx
     };
+}
+
+/// Whether any floating shape in this header/footer was authored with
+/// horizontal `wp:align=center` (paragraph- or page-anchored).
+fn footer_has_center_aligned_float(hf: &HeaderFooterContent) -> bool {
+    if hf.floating_shapes.iter().any(|s| s.h_align_center) {
+        return true;
+    }
+    hf.blocks.iter().any(|b| match b {
+        LayoutBlock::Paragraph {
+            floating_shapes, ..
+        } => floating_shapes.iter().any(|s| s.h_align_center),
+        _ => false,
+    })
+}
+
+/// Lift inherited left/start (and both) paragraph alignment to center.
+/// Same rule as `center_shape_paragraphs` in `floating.rs`: an explicit
+/// right/end stays put.
+fn center_start_paragraphs(blocks: &mut [LayoutBlock]) {
+    use crate::model::Alignment;
+    for block in blocks {
+        if let LayoutBlock::Paragraph { style, .. } = block {
+            if matches!(style.alignment, Alignment::Start | Alignment::Both) {
+                style.alignment = Alignment::Center;
+            }
+        }
+    }
 }
 
 /// Render a single header onto a page.
